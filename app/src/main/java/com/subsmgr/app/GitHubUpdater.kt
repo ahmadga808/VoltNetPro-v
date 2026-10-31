@@ -106,7 +106,7 @@ private fun installedVersion(context: Context): Pair<String, Long> {
     val code = if (android.os.Build.VERSION.SDK_INT >= 28) info.longVersionCode else {
         @Suppress("DEPRECATION") info.versionCode.toLong()
     }
-    return (info.versionName ?: "2.23") to code
+    return (info.versionName ?: "2.24") to code
 }
 
 private fun sha256(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256").digest(bytes)

@@ -217,19 +217,43 @@ object Cloud {
     }
 
     // ---------- الترخيص من الخادم ----------
+    /** يجلب الترخيص ويقارن آخر حالة مؤكدة بالحالة الجديدة؛ أول مزامنة تحفظ خط أساس بلا تنبيه. */
     fun fetchLicense(ctx: Context) {
         val r = http("GET", "/rest/v1/licenses?select=plan,expires_at,sub_limit,suspended&user_id=eq.${uid(ctx)}", token(ctx), null, "application/json", mapOf("Accept" to "application/json"))
         if (!r.ok) throw IllegalStateException(err(r))
         val a = JSONArray(r.text)
-        val e = prefs(ctx).edit()
-        if (a.length() == 0) { e.remove("lic_exp").remove("lic_limit").remove("lic_plan").remove("lic_susp") }
-        else {
-            val j = a.getJSONObject(0)
-            e.putString("lic_exp", j.optString("expires_at")).putInt("lic_limit", j.optInt("sub_limit", 0)).putString("lic_plan", j.optString("plan")).putBoolean("lic_susp", j.optBoolean("suspended", false))
+        val j = if (a.length() > 0) a.getJSONObject(0) else null
+        val next = JSONObject()
+            .put("exists", j != null)
+            .put("plan", j?.optString("plan", "") ?: "")
+            .put("expires", j?.optString("expires_at", "") ?: "")
+            .put("limit", j?.optInt("sub_limit", 0) ?: 0)
+            .put("suspended", j?.optBoolean("suspended", false) ?: false)
+        val p = prefs(ctx)
+        val oldText = p.getString("lic_snapshot", null)
+        if (oldText != null) {
+            val old = runCatching { JSONObject(oldText) }.getOrNull()
+            if (old != null && old.toString() != next.toString()) {
+                val changes = mutableListOf<String>()
+                if (old.optBoolean("exists") != next.optBoolean("exists")) {
+                    changes += if (next.optBoolean("exists")) "تم إنشاء ترخيص لحسابك" else "لم يعد الترخيص موجوداً على الخادم"
+                }
+                if (old.optString("plan") != next.optString("plan")) changes += "الخطة: ${old.optString("plan").ifBlank { "غير محددة" }} ← ${next.optString("plan").ifBlank { "غير محددة" }}"
+                if (old.optString("expires") != next.optString("expires")) changes += "تاريخ الانتهاء: ${old.optString("expires").ifBlank { "غير محدد" }} ← ${next.optString("expires").ifBlank { "غير محدد" }}"
+                if (old.optInt("limit") != next.optInt("limit")) changes += "حد المشتركين: ${old.optInt("limit")} ← ${next.optInt("limit")}"
+                if (old.optBoolean("suspended") != next.optBoolean("suspended")) changes += if (next.optBoolean("suspended")) "تم إيقاف الترخيص" else "تم رفع إيقاف الترخيص"
+                if (changes.isNotEmpty()) p.edit().putString("lic_notice", changes.joinToString("\n")).apply()
+            }
         }
-        e.putString("lic_checked", LocalDate.now().toString()).apply()
+        val e = p.edit().putString("lic_snapshot", next.toString()).putString("lic_checked", LocalDate.now().toString())
+        if (j == null) e.remove("lic_exp").remove("lic_limit").remove("lic_plan").remove("lic_susp")
+        else e.putString("lic_exp", j.optString("expires_at")).putInt("lic_limit", j.optInt("sub_limit", 0)).putString("lic_plan", j.optString("plan")).putBoolean("lic_susp", j.optBoolean("suspended", false))
+        e.apply()
         try { refreshAdmin(ctx) } catch (ex: Exception) { }
     }
+
+    fun pendingLicenseNotice(ctx: Context): String = prefs(ctx).getString("lic_notice", "") ?: ""
+    fun clearLicenseNotice(ctx: Context) { prefs(ctx).edit().remove("lic_notice").apply() }
 
     // ---------- إعدادات التطبيق من الخادم (أسعار، رقم التواصل...) تُعدَّل بدون تحديث التطبيق ----------
     fun fetchConfig(ctx: Context) {

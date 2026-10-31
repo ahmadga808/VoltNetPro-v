@@ -5,13 +5,13 @@ PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$PROJECT_DIR" || exit 1
 
 SDK="$HOME/android-sdk"
-LOG="$HOME/volt_release_v40_2.23_github_updates.log"
+LOG="$HOME/volt_release_v40_2.24_github_updates.log"
 APK="app/build/outputs/apk/release/app-release.apk"
 DOWNLOADS="$HOME/storage/shared/Download"
-FINAL_APK="$DOWNLOADS/VoltNetPro-v40-2.23-GitHub-Auto-Updates.apk"
+FINAL_APK="$DOWNLOADS/VoltNetPro-v40-2.24-GitHub-Auto-Updates.apk"
 EXPECTED_CERT="c3c82eab29b300f2940e67ec2d98bd3607a3346c50bbdae3e99f9efb8e866fb6"
 
-echo "VoltNet Pro 2.23 — GitHub auto-updates build"
+echo "VoltNet Pro 2.24 — GitHub auto-updates build"
 echo "Project: $PROJECT_DIR"
 echo "Log: $LOG"
 

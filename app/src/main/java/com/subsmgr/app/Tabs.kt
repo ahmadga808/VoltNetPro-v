@@ -39,7 +39,7 @@ import java.time.LocalDate
 
 private fun statusMap(gen: Boolean) =
     if (gen) mapOf("الكل" to "", "مسدّد" to "paid", "عليه دين" to "debt", "مقطوع" to "cut")
-    else mapOf("الكل" to "", "فعّال" to "active", "متصل" to "online", "غير متصل" to "offline", "ينتهي قريباً" to "soon", "غير فعّال" to "inactive", "منتهي" to "expired", "عليه دين" to "debt", "مجمّد" to "frozen")
+    else mapOf("الكل" to "", "فعّال" to "active", "متصل" to "online", "غير متصل" to "offline", "ينتهي قريباً" to "soon", "منتهي / غير فعّال" to "expired", "عليه دين" to "debt", "مجمّد" to "frozen")
 private val WhatsApp = Color(0xFF25D366)
 private val CutColor = Color(0xFF6D28D9)
 private val FrozenColor = Color(0xFF0284C7)
@@ -96,15 +96,28 @@ fun SubsTab(db: Db, rev: Int, bump: () -> Unit, initialFilter: String? = null) {
     var q by remember(gen) { mutableStateOf("") }
     var area by remember(gen) { mutableStateOf("") }
     var status by remember(gen) { mutableStateOf("الكل") }
+    var local by remember { mutableIntStateOf(0) }
+    var sortKey by remember(gen) { mutableStateOf("name") }
+    var sortMenu by remember { mutableStateOf(false) }
+    val startDates = remember(rev, local) { db.subscriptionStartDates() }
+    val packagePrices = remember(rev, local) { db.packages().associate { it.id to it.price } }
+    val sortLabels = listOf(
+        "name" to "الاسم (أ-ي)",
+        "start_old" to "تاريخ الاشتراك (الأقدم)",
+        "start_new" to "تاريخ الاشتراك (الأحدث)",
+        "end_near" to "تاريخ الانتهاء (الأقرب)",
+        "end_far" to "تاريخ الانتهاء (الأبعد)",
+        "price_low" to "السعر (الأقل)",
+        "price_high" to "السعر (الأعلى)"
+    )
     LaunchedEffect(initialFilter, gen) {
         status = if (initialFilter == null) "الكل"
         else statusMap(gen).entries.firstOrNull { it.value == initialFilter }?.key ?: "الكل"
     }
     var areaMenu by remember { mutableStateOf(false) }
-    var local by remember { mutableIntStateOf(0) }
     val all = remember(rev, local) { db.listSubs() }
     val sasUsers = Sas.usersSnapshot.value
-    val subs = remember(rev, local, q, area, status, sasUsers, Sas.lastUsersSync.value, Sas.usersSyncError.value) {
+    val filteredSubs = remember(rev, local, q, area, status, sasUsers, Sas.lastUsersSync.value, Sas.usersSyncError.value) {
         val filter = statusMap(gen)[status] ?: ""
         val candidates = db.listSubs(q.trim(), area)
         fun sasUser(s: Sub): SasUser? = s.e1?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }?.let { sasUsers[it] }
@@ -117,14 +130,25 @@ fun SubsTab(db: Db, rev: Int, bump: () -> Unit, initialFilter: String? = null) {
                 val u = sasUser(s)
                 u != null && !u.online && u.enabled && u.status() == "فعّال" && db.statusOf(s) != "مجمّد"
             }
-            !gen && filter == "inactive" -> candidates.filter { s ->
-                sasUser(s)?.enabled == false
+            !gen && filter == "expired" -> candidates.filter { s ->
+                db.statusOf(s) == "منتهي" || sasUser(s)?.enabled == false
             }
             !gen && filter == "soon" -> candidates.filter { s ->
                 val end = runCatching { LocalDate.parse(s.endDate) }.getOrNull()
                 end != null && end >= LocalDate.now() && end <= LocalDate.now().plusDays(3) && db.statusOf(s) == "فعّال"
             }.sortedBy { it.endDate }
             else -> db.listSubs(q.trim(), area, filter)
+        }
+    }
+    val subs = remember(filteredSubs, sortKey, startDates, packagePrices) {
+        when (sortKey) {
+            "start_old" -> filteredSubs.sortedWith(compareBy<Sub> { startDates[it.id].isNullOrBlank() }.thenBy { startDates[it.id] ?: "" })
+            "start_new" -> filteredSubs.sortedWith(compareByDescending<Sub> { !startDates[it.id].isNullOrBlank() }.thenByDescending { startDates[it.id] ?: "" })
+            "end_near" -> filteredSubs.sortedWith(compareBy<Sub> { it.endDate.isNullOrBlank() }.thenBy { it.endDate ?: "" })
+            "end_far" -> filteredSubs.sortedWith(compareByDescending<Sub> { !it.endDate.isNullOrBlank() }.thenByDescending { it.endDate ?: "" })
+            "price_low" -> filteredSubs.sortedBy { packagePrices[it.packageId] ?: Long.MAX_VALUE }
+            "price_high" -> filteredSubs.sortedByDescending { packagePrices[it.packageId] ?: Long.MIN_VALUE }
+            else -> filteredSubs.sortedBy { it.name.lowercase() }
         }
     }
     val areas = remember(rev, local) { db.areas() }
@@ -217,6 +241,53 @@ fun SubsTab(db: Db, rev: Int, bump: () -> Unit, initialFilter: String? = null) {
                                 DropdownMenuItem(text = { Text(a.ifEmpty { "كل المناطق" }) }, onClick = { area = a; areaMenu = false })
                             }
                         }
+                    }
+                }
+            }
+            item {
+                val filterDescription = when (status) {
+                    "الكل" -> if (gen) "يعرض جميع سجلات النشاط، بما فيها المسدّدة والتي عليها دين أو المقطوعة." else "يعرض جميع المشتركين دون استبعاد حسب حالة الاشتراك أو الاتصال."
+                    "فعّال" -> "يعرض الاشتراكات الفعّالة حالياً، مع استبعاد المنتهي والمجمّد."
+                    "متصل" -> "يعرض المشتركين الفعّالين الذين لديهم جلسة اتصال نشطة ومؤكدة من SAS."
+                    "غير متصل" -> "يعرض المشتركين الفعّالين الذين لا تظهر لهم جلسة اتصال نشطة في آخر قراءة من SAS."
+                    "ينتهي قريباً" -> "يعرض الاشتراكات الفعّالة التي ينتهي تاريخها خلال اليوم وحتى 3 أيام، مرتبة بالأقرب انتهاءً."
+                    "منتهي / غير فعّال" -> "يعرض الاشتراكات المنتهية أو الحسابات المعطّلة في SAS."
+                    "عليه دين" -> "يعرض المشتركين الذين لديهم رصيد مستحق غير مسدّد."
+                    "مجمّد" -> "يعرض الاشتراكات التي تم تجميدها ولم يُلغَ تجميدها بعد."
+                    "مسدّد" -> "يعرض سجلات النشاط التي لا يوجد عليها مبلغ متبقٍ." 
+                    "مقطوع" -> "يعرض سجلات النشاط التي تم قطعها." 
+                    else -> "يعرض السجلات المطابقة للفلتر المحدد."
+                }
+                Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = cs.secondaryContainer.copy(alpha = 0.48f))) {
+                    Column(Modifier.padding(horizontal = 12.dp, vertical = 9.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Text("ماذا يعرض هذا الفلتر؟", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = cs.onSecondaryContainer)
+                        Text(filterDescription, fontSize = 12.sp, color = cs.onSecondaryContainer)
+                        Text("النتائج: ${subs.size}", fontSize = 11.sp, color = cs.onSecondaryContainer, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            }
+            item {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("ترتيب حسب", color = cs.onSurfaceVariant, fontSize = 12.sp)
+                    Box {
+                        FilterChip(
+                            selected = sortKey != "name",
+                            onClick = { sortMenu = true },
+                            label = { Text(sortLabels.firstOrNull { it.first == sortKey }?.second ?: "الاسم (أ-ي)") },
+                            leadingIcon = { Icon(Icons.Rounded.Sort, null, Modifier.size(18.dp)) },
+                            trailingIcon = { Icon(Icons.Rounded.KeyboardArrowDown, null, Modifier.size(18.dp)) }
+                        )
+                        DropdownMenu(expanded = sortMenu, onDismissRequest = { sortMenu = false }) {
+                            sortLabels.forEach { (key, label) ->
+                                DropdownMenuItem(
+                                    text = { Text(label) },
+                                    onClick = { sortKey = key; sortMenu = false }
+                                )
+                            }
+                        }
+                    }
+                    if (sortKey != "name" || status != "الكل" || area.isNotEmpty()) {
+                        TextButton(onClick = { sortKey = "name"; status = "الكل"; area = ""; q = "" }) { Text("مسح الفلاتر") }
                     }
                 }
             }
@@ -909,12 +980,14 @@ fun ReportsTab(db: Db, rev: Int) {
 
 // ======================= الإعدادات =======================
 @Composable
-fun SettingsTab(db: Db, rev: Int, bump: () -> Unit, mode: String, onSwitch: (String) -> Unit, onTour: () -> Unit = {}, onAudit: () -> Unit = {}, initialSection: Int = 0) {
+fun SettingsTab(db: Db, rev: Int, bump: () -> Unit, mode: String, onSwitch: (String) -> Unit, onTour: () -> Unit = {}, onAudit: () -> Unit = {}, initialSection: Int = 0, openInitialSection: Boolean = false, onSettingsRoot: () -> Unit = {}) {
     val ctx = LocalContext.current
     val cs = MaterialTheme.colorScheme
     var local by remember { mutableIntStateOf(0) }
     var sec by rememberSaveable { mutableIntStateOf(initialSection.coerceIn(0, SETTINGS_SECTIONS.lastIndex)) }
+    var sectionPageOpen by rememberSaveable { mutableStateOf(openInitialSection) }
     LaunchedEffect(initialSection) { sec = initialSection.coerceIn(0, SETTINGS_SECTIONS.lastIndex) }
+    LaunchedEffect(openInitialSection) { sectionPageOpen = openInitialSection }
     val lic = remember(rev, local) { db.licenseInfo() }
     var key by remember { mutableStateOf("") }
     val modeKey = db.setting("mode", "internet")
@@ -928,9 +1001,19 @@ fun SettingsTab(db: Db, rev: Int, bump: () -> Unit, mode: String, onSwitch: (Str
     val restoreLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) restoreUri = uri }
 
     Column(Modifier.fillMaxSize()) {
-        // المظهر دائماً في أعلى الإعدادات
-        ThemeBar(Modifier.padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 4.dp))
-        SettingsTabsRow(sec) { sec = it }
+        if (!sectionPageOpen) {
+            // صفحة الإعدادات الرئيسية: المظهر وأيقونات الأقسام فقط.
+            ThemeBar(Modifier.padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 4.dp))
+            Text("الإعدادات", fontSize = 21.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp))
+            SettingsTabsRow(sec) { sec = it; sectionPageOpen = true }
+        } else {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = { sectionPageOpen = false; onSettingsRoot() }) {
+                    Icon(Icons.Rounded.ArrowBack, null); Spacer(Modifier.width(6.dp)); Text("الإعدادات")
+                }
+                Text(SETTINGS_SECTIONS[sec].second, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+            }
+        }
 
         Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             SettingsIntro(sec)

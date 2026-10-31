@@ -51,6 +51,7 @@ import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import java.time.LocalDate
 import java.util.Locale
+import kotlinx.coroutines.launch
 
 fun toast(ctx: Context, msg: String) = Toast.makeText(ctx, msg, Toast.LENGTH_LONG).show()
 
@@ -670,6 +671,7 @@ fun MainScreen(db: Db) {
     var tab by remember { mutableIntStateOf(if (Session.isAdmin) 5 else 0) }
     var subscriberFilter by remember { mutableStateOf<String?>(null) }
     var settingsSection by remember { mutableIntStateOf(0) }
+    var settingsPageOpen by remember { mutableStateOf(false) }
     var rev by remember { mutableIntStateOf(0) }
     val bump: () -> Unit = { rev++ }
     val appCtx = LocalContext.current
@@ -677,7 +679,10 @@ fun MainScreen(db: Db) {
     var auditOpen by remember { mutableStateOf(false) }
     var showReleaseNotes by remember { mutableStateOf(false) }
     var showUpdateCenter by remember { mutableStateOf(false) }
-    var releaseVersion by remember { mutableStateOf("2.23") }
+    var releaseVersion by remember { mutableStateOf("2.24") }
+    var licenseNotice by remember { mutableStateOf(Cloud.pendingLicenseNotice(appCtx)) }
+    var licenseRefreshBusy by remember { mutableStateOf(false) }
+    val licenseScope = rememberCoroutineScope()
     var networkPage by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(appCtx) {
         val v = try {
@@ -686,10 +691,22 @@ fun MainScreen(db: Db) {
                 @Suppress("DEPRECATION")
                 info.versionCode.toLong()
             }
-            "${info.versionName ?: "2.23"}-$code"
-        } catch (_: Exception) { "2.23-27" }
+            "${info.versionName ?: "2.24"}-$code"
+        } catch (_: Exception) { "2.24-28" }
         releaseVersion = v
         if (!UiPrefs.releaseShown(appCtx, v)) showReleaseNotes = true
+    }
+    LaunchedEffect(appCtx) {
+        while (true) {
+            if (Cloud.loggedIn(appCtx)) {
+                try {
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { Cloud.fetchLicense(appCtx) }
+                    val pending = Cloud.pendingLicenseNotice(appCtx)
+                    if (pending.isNotBlank()) licenseNotice = pending
+                } catch (_: Exception) { }
+            }
+            kotlinx.coroutines.delay(6L * 60L * 60L * 1000L)
+        }
     }
     LaunchedEffect(rev) { Router.kick(appCtx, db) }
     // النشاط الحالي حالة (State) كي تُعاد تركيبة الشاشة كلها عند التبديل. التبديل من الإعدادات فقط.
@@ -730,7 +747,7 @@ fun MainScreen(db: Db) {
           }
         },
         bottomBar = {
-            NavigationBar(containerColor = c.surface) {
+            if (networkPage == null) NavigationBar(containerColor = c.surface) {
                 tabs.forEach { (icon, label, i) ->
                     NavigationBarItem(selected = tab == i, onClick = { tab = i },
                         icon = { Icon(icon, label) }, label = { Text(label, fontSize = 10.sp, maxLines = 1) })
@@ -740,7 +757,7 @@ fun MainScreen(db: Db) {
     ) { pad ->
         Box(Modifier.padding(pad).fillMaxSize()) {
             when (tab) {
-                5 -> HomeTab(db, rev, onGo = { tab = it }, onGoFilter = { filter -> subscriberFilter = filter; tab = 0 }, onGoSettings = { sec -> settingsSection = sec; tab = 4 }, onAudit = { auditOpen = true }, onTour = { tour = true }, onShowUpdates = { showUpdateCenter = true })
+                5 -> HomeTab(db, rev, onGo = { tab = it }, onGoFilter = { filter -> subscriberFilter = filter; tab = 0 }, onGoSettings = { sec -> settingsSection = sec; settingsPageOpen = true; tab = 4 }, onAudit = { auditOpen = true }, onTour = { tour = true }, onShowUpdates = { showUpdateCenter = true })
                 0 -> SubsTab(db, rev, bump, initialFilter = subscriberFilter)
                 1 -> if (gen) AmpPriceTab(db, rev, bump) else PkgsTab(db, rev, bump)
                 2 -> ExpensesTab(db, rev, bump)
@@ -753,12 +770,42 @@ fun MainScreen(db: Db) {
                     "routers" -> NetworkDestination("الراوترات والأبراج", { networkPage = null }) { Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp)) { SettingsExtras(db, rev, bump, "links") } }
                     else -> NetworkHub { networkPage = it }
                 }
-                else -> if (Session.isAdmin) SettingsTab(db, rev, bump, mode, onSwitch, onTour = { tour = true }, onAudit = { auditOpen = true }, initialSection = settingsSection) else StaffSettings(db)
+                else -> if (Session.isAdmin) SettingsTab(db, rev, bump, mode, onSwitch, onTour = { tour = true }, onAudit = { auditOpen = true }, initialSection = settingsSection, openInitialSection = settingsPageOpen, onSettingsRoot = { settingsPageOpen = false }) else StaffSettings(db)
             }
         }
     }
     if (tour) TourDialog(gen) { UiPrefs.setTourDone(appCtx, true); tour = false }
     if (showReleaseNotes) ReleaseNotesDialog(onDismiss = { showReleaseNotes = false; UiPrefs.setReleaseShown(appCtx, releaseVersion) })
     GitHubUpdateCenter(open = showUpdateCenter, localNotesVisible = showReleaseNotes, onDismiss = { showUpdateCenter = false })
+    if (licenseNotice.isNotBlank()) {
+        AlertDialog(
+            onDismissRequest = { licenseNotice = "" },
+            title = { Text("تم تغيير ترخيص حسابك") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("اكتشف التطبيق اختلافاً بين بيانات الترخيص السابقة والبيانات الحالية من الخادم:")
+                    Text(licenseNotice, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                    Text("اضغط تحديث الترخيص الآن لمزامنة البيانات وتطبيق الحد والمدة والحالة الجديدة.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (licenseRefreshBusy) LinearProgressIndicator(Modifier.fillMaxWidth())
+                }
+            },
+            confirmButton = {
+                Button(enabled = !licenseRefreshBusy, onClick = {
+                    licenseRefreshBusy = true
+                    licenseScope.launch {
+                        val result = runCatching { kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { Cloud.fetchLicense(appCtx) } }
+                        licenseRefreshBusy = false
+                        if (result.isSuccess) {
+                            Cloud.clearLicenseNotice(appCtx)
+                            licenseNotice = ""
+                            bump()
+                            toast(appCtx, "تم تحديث بيانات الترخيص من الخادم")
+                        } else toast(appCtx, result.exceptionOrNull()?.message ?: "تعذر تحديث الترخيص")
+                    }
+                }) { Text("تحديث الترخيص الآن") }
+            },
+            dismissButton = { TextButton(onClick = { licenseNotice = "" }) { Text("لاحقاً") } }
+        )
+    }
     if (auditOpen) AuditDialog(db) { auditOpen = false }
 }

@@ -18,6 +18,33 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+
+/** إشعار ما بعد إنشاء الحساب وطلب تفعيل الترخيص عبر واتساب. */
+@Composable
+private fun NewAccountWhatsAppNotice(email: String, onDismiss: () -> Unit) {
+    val ctx = LocalContext.current
+    val prefix = email.substringBefore('@').trim()
+    val phone = "9647863745531"
+    val message = "مرحباً، تم إنشاء حساب جديد في VoltNet Pro.\nالجزء الأول من البريد الإلكتروني: $prefix\nأرجو تفعيل الحساب ومراجعة زيادة مدة الترخيص وحدّ المشتركين.\nالبريد الإلكتروني: $email"
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("تفعيل الحساب الجديد") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("تم إنشاء الحساب بنجاح.")
+                Text("لإكمال التفعيل وزيادة مدة الترخيص وحدّ المشتركين، أرسل الجزء الأول من بريدك الإلكتروني إلى الرقم التالي عبر واتساب:")
+                Text(prefix, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                Text("+964 786 374 5531", fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                Text("ستفتح رسالة جاهزة؛ راجعها ثم اضغط إرسال بنفسك.", fontSize = 12.sp)
+            }
+        },
+        confirmButton = {
+            Button(onClick = { openUrl(ctx, "https://wa.me/$phone?text=" + android.net.Uri.encode(message)) }) { Text("فتح واتساب") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("لاحقاً") } }
+    )
+}
+
 /** تسجيل الدخول أو إنشاء حساب (بريد + كلمة مرور). */
 @Composable
 fun CloudLoginDialog(onClose: () -> Unit, onLoggedIn: () -> Unit) {
@@ -26,6 +53,7 @@ fun CloudLoginDialog(onClose: () -> Unit, onLoggedIn: () -> Unit) {
     var email by remember { mutableStateOf("") }
     var pass by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
+    var signupNoticeEmail by remember { mutableStateOf("") }
 
     fun go(signup: Boolean) {
         if (email.isBlank() || pass.isBlank()) { toast(ctx, "أدخل البريد وكلمة المرور"); return }
@@ -44,7 +72,8 @@ fun CloudLoginDialog(onClose: () -> Unit, onLoggedIn: () -> Unit) {
             }
             busy = false
             toast(ctx, msg)
-            if (Cloud.loggedIn(ctx)) { Cloud.scheduleAuto(ctx); onLoggedIn() }
+            if (signup) signupNoticeEmail = email.trim()
+            if (Cloud.loggedIn(ctx)) { Cloud.scheduleAuto(ctx); if (!signup) onLoggedIn() }
         }
     }
 
@@ -76,6 +105,10 @@ fun CloudLoginDialog(onClose: () -> Unit, onLoggedIn: () -> Unit) {
         },
         confirmButton = { TextButton(onClick = onClose, enabled = !busy) { Text("إغلاق") } },
     )
+    if (signupNoticeEmail.isNotBlank()) NewAccountWhatsAppNotice(signupNoticeEmail) {
+        signupNoticeEmail = ""
+        if (Cloud.loggedIn(ctx)) onLoggedIn()
+    }
 }
 
 /** بطاقة الحساب والنسخ السحابي في الإعدادات. */
@@ -188,6 +221,7 @@ fun LoginGate(db: Db, ok: () -> Unit) {
     var pass by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var found by remember { mutableStateOf<List<CloudFile>?>(null) }
+    var signupNoticeEmail by remember { mutableStateOf("") }
     LaunchedEffect(Unit) { try { withContext(Dispatchers.IO) { Cloud.fetchConfig(ctx) } } catch (e: Exception) { } }
 
     fun go(signup: Boolean) {
@@ -206,8 +240,10 @@ fun LoginGate(db: Db, ok: () -> Unit) {
                 return@launch
             }
             toast(ctx, msg)
+            if (signup) signupNoticeEmail = email.trim()
             if (!Cloud.loggedIn(ctx)) { busy = false; return@launch }
             Cloud.scheduleAuto(ctx)
+            if (signup) { busy = false; return@launch }
             // هاتف جديد بلا بيانات وعند الحساب نسخة سحابية: اعرض الاستعادة
             val latest = try { withContext(Dispatchers.IO) { Cloud.list(ctx).filter { it.name.endsWith("_latest.db") } } } catch (e: Exception) { emptyList() }
             busy = false
@@ -240,6 +276,18 @@ fun LoginGate(db: Db, ok: () -> Unit) {
         var policy by remember { mutableStateOf(false) }
         TextButton(modifier = Modifier.fillMaxWidth(), onClick = { policy = true }) { Text("سياسة الخصوصية", fontSize = 12.sp) }
         if (policy) PolicyDialog { policy = false }
+    }
+
+    if (signupNoticeEmail.isNotBlank()) NewAccountWhatsAppNotice(signupNoticeEmail) {
+        signupNoticeEmail = ""
+        if (Cloud.loggedIn(ctx)) {
+            busy = true
+            scope.launch {
+                val latest = try { withContext(Dispatchers.IO) { Cloud.list(ctx).filter { it.name.endsWith("_latest.db") } } } catch (e: Exception) { emptyList() }
+                busy = false
+                if (latest.isNotEmpty() && db.listSubs().isEmpty()) found = latest else ok()
+            }
+        }
     }
 
     found?.let { list ->

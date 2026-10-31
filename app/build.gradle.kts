@@ -19,8 +19,8 @@ android {
         applicationId = "com.subsmgr.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 27
-        versionName = "2.23"
+        versionCode = 28
+        versionName = "2.24"
     }
     signingConfigs {
         if (ksProps.containsKey("storeFile")) {

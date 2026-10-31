@@ -180,7 +180,7 @@ fun HomeTab(db: Db, rev: Int, onGo: (Int) -> Unit, onGoFilter: (String?) -> Unit
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text("التعديلات والإضافات الجديدة", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                    Text("اضغط لعرض سجل تغييرات وإضافات VoltNet Pro 2.23", fontSize = 11.sp, color = cs.onSurfaceVariant)
+                    Text("اضغط لعرض سجل تغييرات وإضافات VoltNet Pro 2.24", fontSize = 11.sp, color = cs.onSurfaceVariant)
                 }
                 Text("عرض", color = cs.primary, fontWeight = FontWeight.Bold, fontSize = 12.sp)
             }

@@ -282,6 +282,11 @@ LEFT JOIN (SELECT subscriber_id, SUM(CASE type WHEN 'charge' THEN amount ELSE -a
 
     fun areas(): List<String> = q("SELECT DISTINCT area FROM subscribers WHERE area IS NOT NULL AND area<>'' ORDER BY area") { it.getString(0) }
 
+    /** أقدم تاريخ حركة اشتراك/تجديد مسجلة لكل مشترك؛ المستوردون بلا حركة يبقون بلا تاريخ. */
+    fun subscriptionStartDates(): Map<Long, String> = q(
+        "SELECT subscriber_id, MIN(date) AS first_date FROM transactions WHERE type='charge' AND cancelled=0 GROUP BY subscriber_id"
+    ) { it.getLong(0) to (it.getString(1) ?: "") }.toMap()
+
     fun statusOf(s: Sub): String {
         if (isGenerator()) return if (s.cut) "مقطوع" else if (s.bal > 0) "عليه دين" else "مسدّد"
         if (s.frozenAt != null) return "مجمّد"

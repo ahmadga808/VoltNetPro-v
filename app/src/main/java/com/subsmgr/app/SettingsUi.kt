@@ -205,6 +205,9 @@ fun AppInfoSection() {
     SectionTitle("الجديد في هذه النسخة")
     AppCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            ChangelogLine("v2.24: إضافة شرح أسفل فلاتر المشتركين يوضح نوع النتائج وعددها حسب الفلتر المختار.")
+            ChangelogLine("v2.24: مقارنة بيانات الترخيص بعد المزامنة، وإشعار المستخدم عند تغيير الخطة أو تاريخ الانتهاء أو حد المشتركين أو حالة الإيقاف، مع زر لتحديث الترخيص.")
+            ChangelogLine("v2.24: تحويل أيقونات الإعدادات ومركز الشبكة إلى صفحات مستقلة لكل قسم، مع زر رجوع واضح إلى الصفحة الرئيسية للقسم.")
             ChangelogLine("v2.23: تنظيم الإعدادات في شبكة أيقونات، وتجميع أدوات الاتصال والمراقبة في مركز الشبكة.")
             ChangelogLine("v2.23: دمج القوالب والرسائل، وإضافة عرض سجل التغييرات عند بدء النسخة الجديدة ومن الرئيسية.")
             ChangelogLine("v2.23: جعل إنشاء الحساب اختيارياً مع تذكير عند التشغيل وشرح حفظ البيانات محلياً والنسخ السحابي.")
@@ -237,9 +240,11 @@ fun ReleaseNotesDialog(onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = { Icon(Icons.Rounded.NewReleases, null, tint = MaterialTheme.colorScheme.primary) },
-        title = { Text("التعديلات والإضافات الجديدة — VoltNet Pro 2.23", fontWeight = FontWeight.Bold) },
+        title = { Text("التعديلات والإضافات الجديدة — VoltNet Pro 2.24", fontWeight = FontWeight.Bold) },
         text = {
             Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("أسفل فلاتر المشتركين يظهر شرح يوضح ما الذي يعرضه الفلتر وعدد النتائج الحالية.", fontSize = 13.sp)
+                Text("عند اكتشاف تغيير في ترخيص الحساب من الخادم، يظهر إشعار بتفاصيل التغييرات في الخطة أو تاريخ الانتهاء أو حد المشتركين أو حالة الإيقاف، مع زر لمزامنة الترخيص الجديد.", fontSize = 13.sp)
                 Text("واجهة الإعدادات أصبحت شبكة أيقونات مع اسم أسفل كل أيقونة.", fontSize = 13.sp)
                 Text("تم تجميع لوحاتي وفحص الربط ومراقبة الشبكة والراوترات والأبراج وتنبيهات Telegram والمساعد الذكي داخل مركز الشبكة.", fontSize = 13.sp)
                 Text("تم دمج القوالب والرسائل في قسم واحد داخل الإعدادات.", fontSize = 13.sp)

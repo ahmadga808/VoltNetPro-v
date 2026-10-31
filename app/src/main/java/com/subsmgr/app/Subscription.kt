@@ -29,12 +29,23 @@ fun PurchaseSection(db: Db) {
     val ctx = LocalContext.current
     val cs = MaterialTheme.colorScheme
     val plans = Cloud.config(ctx, "plans_text", "للاشتراك أو التجديد تواصل مع المطوّر.")
-    var requestType by remember { mutableStateOf("تجديد الاشتراك") }
+    val licenseUpdateVersion = Cloud.config(ctx, "license_update_version", "")
+    val licenseUpdateMessage = Cloud.config(ctx, "license_update_message", "")
+    var requestType by remember(licenseUpdateVersion) { mutableStateOf(if (licenseUpdateVersion.isNotBlank()) "تحديث الترخيص بعد تغيير المطوّر" else "تجديد الاشتراك") }
     var notes by remember { mutableStateOf("") }
     var chooseRequest by remember { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Surface(shape = RoundedCornerShape(14.dp), color = cs.surfaceVariant) {
             Text(plans, fontSize = 13.sp, modifier = Modifier.fillMaxWidth().padding(12.dp))
+        }
+        if (licenseUpdateVersion.isNotBlank() || licenseUpdateMessage.isNotBlank()) {
+            Surface(shape = RoundedCornerShape(14.dp), color = cs.tertiaryContainer) {
+                Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(if (licenseUpdateVersion.isBlank()) "تنبيه من المطوّر بخصوص الترخيص" else "تحديث الترخيص — الإصدار $licenseUpdateVersion", fontWeight = FontWeight.Bold, color = cs.onTertiaryContainer)
+                    if (licenseUpdateMessage.isNotBlank()) Text(licenseUpdateMessage, fontSize = 12.sp, color = cs.onTertiaryContainer)
+                    Text("لإتمام التحديث: اضغط طلب الترخيص أدناه، اختر «تحديث الترخيص بعد تغيير المطوّر»، ثم افتح واتساب وراجع الرسالة واضغط إرسال بنفسك. بعد استلام المفتاح أو تعليمات التحديث، أدخلها من شاشة تفعيل البرنامج أو حدّث الترخيص من حسابك إذا كان حسابك مرتبطاً.", fontSize = 11.sp, color = cs.onTertiaryContainer)
+                }
+            }
         }
         OutlinedButton(onClick = { chooseRequest = true }, modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(14.dp)) {
@@ -47,7 +58,7 @@ fun PurchaseSection(db: Db) {
                 title = { Text("طلب الترخيص") },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf("زيادة عدد المشتركين", "تمديد مدة الترخيص", "تجديد الاشتراك", "استفسار عن الاشتراك أو التفعيل").forEach { option ->
+                        listOf("زيادة عدد المشتركين", "تمديد مدة الترخيص", "تجديد الاشتراك", "تحديث الترخيص بعد تغيير المطوّر", "استفسار عن الاشتراك أو التفعيل").forEach { option ->
                             Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                                 RadioButton(selected = requestType == option, onClick = { requestType = option })
                                 Text(option, fontSize = 13.sp)

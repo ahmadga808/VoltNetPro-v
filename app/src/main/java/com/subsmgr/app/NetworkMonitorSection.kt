@@ -37,9 +37,6 @@ fun NetworkMonitorSection(initialSection: String? = null) {
     var devices by remember { mutableStateOf(Router.monList(ctx)) }
     var history by remember { mutableStateOf(((ctx.getSharedPreferences("network_history_v1", android.content.Context.MODE_PRIVATE).getString("samples", "") ?: "").split("\n").filter { it.isNotBlank() }.takeLast(96).reversed())) }
     val pageScroll = rememberScrollState()
-    LaunchedEffect(initialSection, pageScroll.maxValue) {
-        if (initialSection == "telegram" || initialSection == "assistant") pageScroll.animateScrollTo(pageScroll.maxValue)
-    }
     var name by remember { mutableStateOf("") }
     var ip by remember { mutableStateOf("") }
 
@@ -79,6 +76,9 @@ fun NetworkMonitorSection(initialSection: String? = null) {
     }
 
     Column(Modifier.fillMaxSize().verticalScroll(pageScroll).padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    if (initialSection == "telegram" || initialSection == "assistant") {
+        TelegramAssistantSection(signals = signals, states = states, devices = devices, stats = stats, section = initialSection)
+    } else {
     SectionTitle("مركز الشبكة")
     Text("لوحة موحّدة لحالة الراوتر والأبراج والروابط. تُعرض القراءات الفعلية فقط؛ البيانات غير المتاحة تظهر بوضوح ولا تُستنتج تخميناً.", fontSize = 12.sp, color = cs.onSurfaceVariant)
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -291,7 +291,7 @@ fun NetworkMonitorSection(initialSection: String? = null) {
     }
     if (devices.isNotEmpty()) Text("ملاحظة: فحص الخلفية في Android قد يتأخر بسبب قيود النظام؛ لا تعتمد عليه كإنذار طوارئ مضمون.", fontSize = 11.sp, color = cs.onSurfaceVariant)
 
-    TelegramAssistantSection(signals = signals, states = states, devices = devices, stats = stats)
+    }
     }
 }
 

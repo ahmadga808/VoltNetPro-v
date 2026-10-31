@@ -46,7 +46,7 @@ private fun telegramSend(ctx: Context, message: String): String {
 
 /** Telegram alerts are generated from real monitoring values already read by the app. */
 @Composable
-fun TelegramAssistantSection(signals: List<SignalRow>, states: Map<String, Boolean>, devices: List<MonDevice>, stats: RouterStats?) {
+fun TelegramAssistantSection(signals: List<SignalRow>, states: Map<String, Boolean>, devices: List<MonDevice>, stats: RouterStats?, section: String? = null) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     val cs = MaterialTheme.colorScheme
@@ -88,6 +88,7 @@ fun TelegramAssistantSection(signals: List<SignalRow>, states: Map<String, Boole
         p.edit().putBoolean("baseline_initialized", true).apply()
     }
 
+    if (section == null || section == "telegram") {
     SectionTitle("تنبيهات Telegram")
     Text("أدخل بيانات بوت Telegram. تُرسل التنبيهات عند اكتشاف تغيّر الحالة أثناء تحديث بيانات مراقبة الشبكة؛ هذه النسخة لا تراقب في الخلفية بعد إغلاق الشاشة.", fontSize = 12.sp, color = cs.onSurfaceVariant)
     OutlinedTextField(token, { token = it }, label = { Text("Telegram Bot Token") }, modifier = Modifier.fillMaxWidth(), singleLine = true, visualTransformation = PasswordVisualTransformation())
@@ -112,6 +113,8 @@ fun TelegramAssistantSection(signals: List<SignalRow>, states: Map<String, Boole
     if (status.isNotBlank()) Text(status, color = if (status.contains("فشل") || status.contains("تعذر")) cs.error else cs.primary, fontSize = 12.sp)
     Text("تنبيه أمني: Bot Token سرّي؛ لا تشاركه مع أحد. يُحفظ محلياً في بيانات التطبيق. التنبيه يتطلب اتصال إنترنت وقت الإرسال.", fontSize = 11.sp, color = cs.onSurfaceVariant)
 
+    }
+    if (section == null || section == "assistant") {
     SectionTitle("المساعد الذكي للشبكة")
     AppCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -134,5 +137,6 @@ fun TelegramAssistantSection(signals: List<SignalRow>, states: Map<String, Boole
             advice.forEach { Text("• $it", fontSize = 13.sp) }
             Text("هذا مساعد قائم على قواعد تشخيصية محلية، وليس نموذج محادثة سحابياً؛ توصياته تعتمد فقط على البيانات التي قرأها التطبيق.", fontSize = 11.sp, color = cs.onSurfaceVariant)
         }
+    }
     }
 }
